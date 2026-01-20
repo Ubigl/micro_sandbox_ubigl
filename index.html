@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<title>Micro Sandbox: Light & Craft</title>
+<style>
+  body { margin: 0; background: #020205; overflow: hidden; font-family: monospace; }
+  canvas { display: block; image-rendering: pixelated; }
+  #ui {
+    position: fixed; top: 10px; left: 10px; color: #fff; pointer-events: none;
+    background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px; font-size: 11px;
+  }
+  #inv-win {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: #1a1a1a; border: 2px solid #444; color: #fff; padding: 15px;
+    display: none; pointer-events: all; z-index: 100; max-height: 80vh; overflow-y: auto;
+  }
+  .btn { background: #333; color: #fff; border: 1px solid #555; cursor: pointer; padding: 4px; margin: 2px; font-size: 10px; }
+  .active-slot { border: 2px solid #0ff !important; background: #444; }
+</style>
+</head>
+<body>
+
+<div id="ui">
+  WASD - Мобильность | E - Инвентарь | 1-5 - Выбор блока<br>
+  <div id="status">Рука: Камень</div>
+  <div id="inv-preview"></div>
+</div>
+
+<div id="inv-win">
+  <h3>КРАФТ И РЕСУРСЫ</h3>
+  <div id="full-inv"></div>
+  <hr>
+  <button class="btn" onclick="craft('Silver Bar', {Silver: 2})">Серебряный слиток (2 руды)</button>
+  <button class="btn" onclick="craft('Gold Bar', {Gold: 2})">Золотой слиток (2 руды)</button>
+  <button class="btn" onclick="craft('Copper Pickaxe', {Copper: 3})">Медная кирка (3 меди)</button>
+  <button class="btn" onclick="craft('Iron Shovel', {'Iron': 3})">Железная лопата (3 железа)</button>
+  <br>
+  <button class="btn" style="width:100%; margin-top:10px;" onclick="toggleInv()">ЗАКРЫТЬ</button>
+</div>
+
+<canvas id="game"></canvas>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+const TILE = 8;
+const TYPES = {
+  0: { name: "Air", color: "transparent", light: 0 },
+  1: { name: "Stone", color: "#444", light: 0 },
+  2: { name: "Grass", color: "#2a2", light: 0 },
+  3: { name: "Dirt", color: "#532", light: 0 },
+  4: { name: "Coal", color: "#111", light: 0 },
+  5: { name: "Iron", color: "#bdc", light: 0 },
+  6: { name: "Gold", color: "#fd0", light: 0 },
+  7: { name: "Copper", color: "#d74", light: 0 },
+  8: { name: "Diamond", color: "#0ef", light: 5 },
+  9: { name: "Ruby", color: "#f22", light: 4 },
+  10: { name: "Emerald", color: "#2f5", light: 4 },
+  11: { name: "Forge", color: "#933", label: "⚒️ FORGE" },
+  12: { name: "Silver", color: "#e3e3e3", light: 0 },
+  13: { name: "House", color: "#855", label: "HOME" },
+  14: { name: "Library", color: "#34495e", label: "📖 LIB" },
+  15: { name: "Storage", color: "#795548", label: "📦 BOX" },
+  16: { name: "Shop", color: "#c85", label: "SHOP" }
+};
+
+let world = {};
+let inventory = { "Stone": 10, "Dirt": 10 };
+let selectedBlock = "Stone";
+let isInvOpen = false;
+let tools = { pickaxe: false, shovel: false };
+
+// Дома и здания
+const buildings = [
+  { x: 0, y: 59, type: 11 },   // Forge
+  { x: 30, y: 59, type: 13 },  // House
+  { x: 60, y: 59, type: 16 },  // Shop
+  { x: 90, y: 59, type: 14 },  // LIB
+  { x: 120, y: 59, type: 15 }, // BOX
+];
+
+function generateBlock(x, y) {
+  const key = `${x}_${y}`;
+  if (world[key] !== undefined) return world[key];
+  let type = 0;
+  const ground = 60;
+
+  if (y === ground) {
+    type = 2; // Grass
+  } else if (y === ground + 1) {
+    type = 3; // Dirt
+  } else if (y > ground + 1) {
+    type = 1; // Stone by default
+    const r = Math.random();
+
+    // Руды 
+    if (y > 95 && r < 0.005) {
+      type = 8; // Diamond
+    } else if (y > 85 && r < 0.01) {
+      type = 9; // Ruby
+    } else if (y > 80 && r < 0.015) {
+      type = 10; // Emerald
+    } else if (r < 0.01) {
+      type = 6; // Gold
+    } else if (r < 0.02) {
+      type = 7; // Copper
+    } else if (r < 0.03) {
+      type = 12; // Silver
+    } else if (r < 0.04) {
+      type = 5; // Iron
+    } else if (r < 0.06) {
+      type = 4; // Coal
+    }
+  }
+
+  // Здания
+  for (const b of buildings) {
+    if (x === b.x && y === b.y - 1) {
+      type = b.type;
+    }
+  }
+
+  world[key] = type;
+  return type;
+}
+
+const player = { x: 0, y: 450, vx: 0, vy: 0, w: 5, h: 5, grounded: false };
+let camX = 0, camY = 0;
+
+// NPC
+const npcs = [
+  { x: 15, y: 450, targetX: 145, speed: 0.5, w: 4, h: 4, color: "#0f0" },
+  { x: 75, y: 450, targetX: 115, speed: 0.4, w: 4, h: 4, color: "#0af" },
+  { x: 235, y: 450, targetX: 150, speed: 0.3, w: 4, h: 4, color: "#fa0" }
+];
+
+window.onkeydown = (e) => {
+  if (e.key === 'e') toggleInv();
+  if (["1","2","3","4","5"].includes(e.key)) {
+    const keys = ["Stone", "Dirt", "Grass", "Copper", "Iron"];
+    selectedBlock = keys[parseInt(e.key)-1] || "Stone";
+    updateUI();
+  }
+};
+
+function toggleInv() {
+  isInvOpen = !isInvOpen;
+  document.getElementById("inv-win").style.display = isInvOpen ? "block" : "none";
+  updateUI();
+}
+
+canvas.onmousedown = (e) => {
+  if (isInvOpen) return;
+  const rect = canvas.getBoundingClientRect();
+  const wx = Math.floor((e.clientX - rect.left + camX) / TILE);
+  const wy = Math.floor((e.clientY - rect.top + camY) / TILE);
+  const block = generateBlock(wx, wy);
+
+  if (block > 0 && ![11,13,14].includes(block)) {
+    inventory[TYPES[block].name] = (inventory[TYPES[block].name] || 0) + 1;
+    world[`${wx}_${wy}`] = 0;
+  } else if (block === 0) {
+    if (inventory[selectedBlock] > 0) {
+      const id = Object.keys(TYPES).find(k => TYPES[k].name === selectedBlock);
+      if (id) {
+        world[`${wx}_${wy}`] = parseInt(id);
+        inventory[selectedBlock]--;
+      }
+    }
+  }
+  updateUI();
+};
+
+function craft(item, req) {
+  for (let r in req) if ((inventory[r]||0) < req[r]) return;
+  for (let r in req) inventory[r] -= req[r];
+  inventory[item] = (inventory[item]||0) + 1;
+  if (item.includes("Pickaxe")) tools.pickaxe = true;
+  if (item.includes("Shovel")) tools.shovel = true;
+  updateUI();
+}
+
+function updateUI() {
+  document.getElementById("status").innerText = `В руке: ${selectedBlock} (${inventory[selectedBlock]||0})`;
+  document.getElementById("full-inv").innerHTML = Object.entries(inventory)
+    .filter(([n, v]) => v > 0)
+    .map(([n, v]) => `<div>${n}: ${v}</div>`).join("");
+}
+
+function checkCol(nx, ny, w = player.w, h = player.h) {
+  for (let ix = Math.floor(nx / TILE); ix <= Math.floor((nx + w) / TILE); ix++) {
+    for (let iy = Math.floor(ny / TILE); iy <= Math.floor((ny + h) / TILE); iy++) {
+      const t = generateBlock(ix, iy);
+      if (t > 0 && ![11,13,14].includes(t)) return true;
+    }
+  }
+  return false;
+}
+
+function moveNPC(npc) {
+  if (npc.x < npc.targetX) {
+    npc.x += npc.speed;
+    if (npc.x >= npc.targetX) npc.x = npc.targetX;
+  } else if (npc.x > npc.targetX) {
+    npc.x -= npc.speed;
+    if (npc.x <= npc.targetX) npc.x = npc.targetX;
+  }
+
+  if (Math.abs(npc.x - npc.targetX) < 1) {
+    npc.targetX = npc.x < 60 ? 120 : 15;
+  }
+}
+
+function render() {
+  ctx.fillStyle = "#050510";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const sx = Math.floor(camX / TILE) - 5;
+  const ex = sx + Math.ceil(canvas.width / TILE) + 10;
+  const sy = Math.floor(camY / TILE) - 5;
+  const ey = sy + Math.ceil(canvas.height / TILE) + 10;
+
+  for (let x = sx; x < ex; x++) {
+    for (let y = sy; y < ey; y++) {
+      const type = generateBlock(x, y);
+      if (type === 0) continue;
+
+      let dist = Math.hypot(x - Math.floor(player.x / TILE), y - Math.floor(player.y / TILE));
+      let light = Math.max(0, 1 - dist / 8);
+      if (TYPES[type].light > 0) light += 0.5;
+
+      ctx.fillStyle = TYPES[type].color;
+      ctx.globalAlpha = Math.min(1, light + 0.1);
+      ctx.fillRect(x * TILE - camX, y * TILE - camY, TILE, TILE);
+      ctx.globalAlpha = 1;
+
+      if (TYPES[type].label) {
+        ctx.fillStyle = "#fff";
+        ctx.font = "6px monospace";
+        ctx.fillText(TYPES[type].label, x * TILE - camX, (y - 1) * TILE - camY);
+      }
+    }
+  }
+
+  for (const npc of npcs) {
+    moveNPC(npc);
+    ctx.fillStyle = npc.color;
+    ctx.fillRect(npc.x - camX, npc.y - camY, npc.w, npc.h);
+  }
+
+  ctx.fillStyle = "#0ff";
+  ctx.fillRect(player.x - camX, player.y - camY, player.w, player.h);
+}
+
+window.keys = {};
+window.addEventListener("keydown", e => window.keys[e.key.toLowerCase()] = true);
+window.addEventListener("keyup", e => window.keys[e.key.toLowerCase()] = false);
+
+function gameLoop() {
+  if (!isInvOpen) {
+    let speed = 0.4 + (tools.pickaxe ? 0.2 : 0);
+    
+    if (window.keys["a"]) player.vx -= speed;
+    if (window.keys["d"]) player.vx += speed;
+    if ((window.keys["w"] || window.keys[" "]) && player.grounded) {
+      player.vy = -4;
+      player.grounded = false;
+    }
+
+    player.vy += 0.2;
+    player.vx *= 0.8;
+
+    if (!checkCol(player.x + player.vx, player.y)) player.x += player.vx; else player.vx = 0;
+    player.grounded = false;
+    if (!checkCol(player.x, player.y + player.vy)) {
+      player.y += player.vy;
+    } else {
+      if (player.vy > 0) player.grounded = true;
+      player.vy = 0;
+    }
+
+    camX += (player.x - camX - canvas.width / 2) * 0.1;
+    camY += (player.y - camY - canvas.height / 2) * 0.1;
+  }
+
+  render();
+  requestAnimationFrame(gameLoop);
+}
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+updateUI();
+gameLoop();
+
+window.addEventListener("resize", () => {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+});
+</script>
+</body>
+</html>
