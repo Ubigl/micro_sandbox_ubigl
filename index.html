@@ -146,11 +146,14 @@ function generateBlock(x, y) {
 
 /* ================= ENTITIES ================= */
 const player = { x: 50, y: 450, vx: 0, vy: 0, w: 5, h: 5, grounded: false };
-const npcs = [
-  { x: 20, y: 470, targetX: 100, speed: 0.3, color: "#f0f", w: 4, h: 4 },
-  { x: 150, y: 470, targetX: 50, speed: 0.2, color: "#0ff", w: 4, h: 4 },
-  { x: -50, y: 470, targetX: 10, speed: 0.4, color: "#ff0", w: 4, h: 4 }
-];
+const npcs = Array.from({length: 8}, () => ({
+  x: (Math.random() - 0.5) * 1000, // Случайная позиция по горизонтали
+  y: 470, 
+  targetX: (Math.random() - 0.5) * 1000, 
+  speed: 0.2 + Math.random() * 0.3, 
+  color: `hsl(${Math.random() * 360}, 70%, 60%)`, // Разные цвета для всех
+  w: 4, h: 4 
+}));
 const birds = Array.from({length: 18}, () => ({ x: Math.random()*500, y: 470, vx: 0, vy: 0 }));
 
 /* ================= LOGIC =======ubigl.club========== */
@@ -311,3 +314,4 @@ loop();
 </body>
 
 </html>
+
