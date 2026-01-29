@@ -2,97 +2,164 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8" />
-<title>Micro Sandbox: Ultimate Edition</title>
+<title>Micro Sandbox: Enhanced Edition</title>
 <style>
-  body { margin: 0; background: #020205; overflow: hidden; font-family: monospace; }
-  canvas { display: block; image-rendering: pixelated; }
+  body { margin: 0; background: #050508; overflow: hidden; font-family: monospace; }
+  canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
   #ui {
     position: fixed; top: 10px; left: 10px; color: #fff; pointer-events: none;
-    background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px; font-size: 11px;
+    background: rgba(0,0,0,0.85); padding: 10px; border-radius: 6px; font-size: 11px; 
+    border: 2px solid #444;
   }
+  #bars { margin-top: 6px; display: flex; gap: 6px; flex-direction: column; }
+  .bar { height: 10px; background: #222; border: 1px solid #555; position: relative; border-radius: 2px; overflow: hidden; width: 100px; }
+  .bar-fill { height: 100%; transition: width 0.2s; }
+  .hp { background: linear-gradient(90deg, #f22, #f55); }
+  .hunger { background: linear-gradient(90deg, #fa0, #fc3); }
   #inv-win {
     position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-    background: #1a1a1a; border: 2px solid #444; color: #fff; padding: 15px;
-    display: none; pointer-events: all; z-index: 100; max-height: 80vh; overflow-y: auto;
+    background: linear-gradient(135deg, #1a1a2e, #16213e); border: 3px solid #0f3460; 
+    color: #fff; padding: 18px; display: none; pointer-events: all; z-index: 100;
+    border-radius: 8px; max-height: 75vh; overflow-y: auto; max-width: 500px;
   }
-  .btn { background: #333; color: #fff; border: 1px solid #555; cursor: pointer; padding: 4px; margin: 2px; font-size: 10px; }
+  .btn { 
+    background: linear-gradient(135deg, #2c3e50, #34495e); color: #fff; 
+    border: 2px solid #555; cursor: pointer; padding: 6px 10px; margin: 2px; 
+    font-size: 10px; border-radius: 4px; transition: transform 0.1s;
+  }
+  .btn:hover { transform: scale(1.03); }
+  .btn:active { transform: scale(0.97); }
+  #achievements {
+    position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.85);
+    padding: 8px; border-radius: 6px; border: 2px solid #444; max-width: 180px;
+    color: #fff; font-size: 9px; pointer-events: none;
+  }
+  .achievement {
+    background: #1a4d2e; padding: 4px; margin: 2px 0; border-radius: 3px;
+    border-left: 3px solid #4f9; animation: slideIn 0.3s;
+  }
+  @keyframes slideIn {
+    from { transform: translateX(200px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+  #time-display {
+    position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.75); padding: 6px 12px; border-radius: 15px;
+    color: #fff; font-size: 11px; border: 2px solid #444;
+  }
 </style>
 </head>
 <body>
 
 <div id="ui">
-  WASD - Ходить | E - Инвентарь | 1-7 - Выбор блока<br>
-  <div id="status">Рука: Stone</div>
-  <div id="save-msg" style="color:#0f0; opacity:0; transition: 1s;">Мир сохранен!</div>
+  🎮 <b>WASD</b> Движение | <b>E</b> Инвентарь | <b>T</b> Торговать | <b>1-9</b> Слот | <b>F</b> Факел<br>
+  <div id="status">🔨 Рука: Stone (0)</div>
+  <div id="bars">
+    <div>❤️ <div class="bar"><div class="bar-fill hp" id="hp-bar" style="width:100%"></div></div></div>
+    <div>🍖 <div class="bar"><div class="bar-fill hunger" id="hunger-bar" style="width:100%"></div></div></div>
+  </div>
+  <div id="trade-msg" style="color: #ff0; display:none; margin-top: 6px;">💰 T - обмен (10 слитков = 1 монета)</div>
+</div>
+
+<div id="time-display">
+  <span id="time-icon">☀️</span> <span id="time-text">День</span> | Глубина: <span id="depth">0</span>м
+</div>
+
+<div id="achievements">
+  <b>🏆 Достижения:</b>
+  <div id="achievement-list"></div>
 </div>
 
 <div id="inv-win">
-  <h3>КРАФТ И ИНВЕНТАРЬ</h3>
-  <div id="full-inv"></div>
-  <hr>
-  <button class="btn" onclick="craft('Silver Bar', {Silver: 2})">Серебряный слиток (2 руды)</button>
-  <button class="btn" onclick="craft('Gold Bar', {Gold: 2})">Золотой слиток (2 руды)</button>
-  <button class="btn" onclick="craft('Copper Pickaxe', {Copper: 3})">Медная кирка (3 меди)</button>
-  <button class="btn" onclick="craft('Iron Shovel', {Iron: 3})">Железная лопата (3 железа)</button>
-  <button class="btn" onclick="craft('Bucket', {Iron: 3})">Ведро (для воды/лавы)</button>
+  <h2 style="margin:0 0 12px 0; text-align:center; color:#4f9;">📦 ИНВЕНТАРЬ</h2>
+  <div id="full-inv" style="display:grid; grid-template-columns: 1fr 1fr; gap:6px; margin-bottom:12px;"></div>
+  <hr style="border-color:#444;">
+  <h3 style="color:#4f9; margin:8px 0;">⚒️ Крафт</h3>
+  <button class="btn" onclick="craft('Iron Bar', {Iron: 2})">🔩 Железный слиток (2)</button>
+  <button class="btn" onclick="craft('Silver Bar', {Silver: 2})">⚪ Серебряный слиток (2)</button>
+  <button class="btn" onclick="craft('Gold Bar', {Gold: 2})">🟡 Золотой слиток (2)</button>
+  <button class="btn" onclick="craft('Torch', {Coal: 1, Wood: 1})">🔦 Факел (уголь+дерево)</button>
   <br>
-  <button class="btn" style="width:100%; margin-top:10px;" onclick="toggleInv()">ЗАКРЫТЬ</button>
+  <button class="btn" onclick="craft('Copper Pickaxe', {Copper: 25})">⛏️ Медная кирка (25)</button>
+  <button class="btn" onclick="craft('Iron Shovel', {Iron: 25})">🔨 Железная лопата (25)</button>
+  <button class="btn" onclick="craft('Bucket', {Iron: 12})">🪣 Ведро (12)</button>
+  <h3 style="color:#4f9; margin:8px 0;">🛒 Магазин</h3>
+  <button class="btn" onclick="buy('Super Jump', 500)">🦘 Супер-прыжок (500)</button>
+  <button class="btn" onclick="buy('Speed Boots', 1000)">👢 Скорость (1000)</button>
+  <button class="btn" onclick="buy('Bread', 5)">🍞 Хлеб +20 (5)</button>
+  <br><button class="btn" style="width:100%; margin-top:8px; background:#c33;" onclick="toggleInv()">❌ ЗАКРЫТЬ</button>
 </div>
 
 <canvas id="game"></canvas>
 
 <script>
 const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
+const ctx = canvas.getContext("2d", { alpha: false });
 
-/* ================= TYPES & CONFIG ======seo===u==b==i==g=l= */
 const TILE = 8;
 const TYPES = {
   0: { name: "Air", color: "transparent", light: 0 },
-  1: { name: "Stone", color: "#444", light: 0 },
-  2: { name: "Grass", color: "#2a2", light: 0 },
-  3: { name: "Dirt", color: "#532", light: 0 },
-  4: { name: "Coal", color: "#111", light: 0 },
-  5: { name: "Iron", color: "#bdc", light: 0 },
+  1: { name: "Stone", color: "#555", light: 0 },
+  2: { name: "Grass", color: "#3a4", light: 0 },
+  3: { name: "Dirt", color: "#642", light: 0 },
+  4: { name: "Coal", color: "#222", light: 0 },
+  5: { name: "Iron", color: "#adb", light: 0 },
   6: { name: "Gold", color: "#fd0", light: 0 },
   7: { name: "Copper", color: "#d74", light: 0 },
-  8: { name: "Diamond", color: "#0ef", light: 5 },
-  9: { name: "Ruby", color: "#f22", light: 4 },
-  10: { name: "Emerald", color: "#2f5", light: 4 },
-  11: { name: "Forge", color: "#933", label: "⚒️ FORGE" },
-  12: { name: "Silver", color: "#e3e3e3", light: 0 },
-  17: { name: "Water", color: "rgba(0, 100, 255, 0.7)", liquid: true, light: 0 },
-  18: { name: "Lava", color: "#f50", liquid: true, light: 6 }
+  8: { name: "Diamond", color: "#0ef", light: 4 },
+  9: { name: "Ruby", color: "#f33", light: 1 },
+  10: { name: "Emerald", color: "#2f6", light: 1 },
+  11: { name: "Forge", color: "#a44", label: "⚒️" },
+  12: { name: "Silver", color: "#ddd", light: 0 },
+  13: { name: "Sand", color: "#dc8", light: 0 },
+  14: { name: "Clay", color: "#a86", light: 0 },
+  15: { name: "Obsidian", color: "#213", light: 0 },
+  16: { name: "Torch", color: "#fa0", light: 8 },
+  17: { name: "Water", color: "#06f", liquid: true, light: 0 },
+  18: { name: "Lava", color: "#f50", liquid: true, light: 2 },
+  19: { name: "Coin", color: "#ff0", light: 3 },
+  20: { name: "Wood", color: "#753", light: 0 },
+  21: { name: "Leaves", color: "#262", light: 0 }
 };
 
 let world = {};
-let inventory = { "Stone": 20, "Water": 5, "Lava": 2 };
+let inventory = { "Stone": 10, "Iron": 5, "Coin": 0, "Wood": 5, "Coal": 3 };
 let selectedBlock = "Stone";
 let isInvOpen = false;
 let tools = { pickaxe: false, shovel: false };
+let particles = [];
 
-/* ================= SAVE SYSTEM ================= */
-function saveGame() {
-    const data = { world, inventory, playerPos: {x: player.x, y: player.y}, tools };
-    localStorage.setItem('microSandboxSave', JSON.stringify(data));
-    const msg = document.getElementById("save-msg");
-    msg.style.opacity = 1;
-    setTimeout(() => msg.style.opacity = 0, 2000);
+// Оптимизация: меньше облаков
+let clouds = Array.from({length: 12}, () => ({ 
+  x: Math.random() * 1200, 
+  y: Math.random() * 250 + 120, 
+  w: Math.random() * 35 + 18,
+  speed: Math.random() * 0.12 + 0.04
+}));
+
+let gameTime = 0;
+let playerStats = { hp: 100, maxHp: 100, hunger: 100, maxHunger: 100 };
+let achievements = [];
+let frameCount = 0;
+
+function addAchievement(text) {
+  if (achievements.includes(text)) return;
+  achievements.push(text);
+  const list = document.getElementById("achievement-list");
+  const div = document.createElement("div");
+  div.className = "achievement";
+  div.textContent = text;
+  list.appendChild(div);
+  setTimeout(() => div.remove(), 4000);
 }
 
-function loadGame() {
-    const saved = localStorage.getItem('microSandboxSave');
-    if (saved) {
-        const data = JSON.parse(saved);
-        world = data.world;
-        inventory = data.inventory;
-        player.x = data.playerPos.x;
-        player.y = data.playerPos.y;
-        tools = data.tools;
-    }
+// Оптимизация: кеш для шума
+const noiseCache = {};
+function getNoise(x) {
+  if (!noiseCache[x]) noiseCache[x] = Math.sin(x * 0.15);
+  return noiseCache[x];
 }
 
-/* ================= WORLD GEN =========seo===ubiglab===== */
 function generateBlock(x, y) {
   const key = `${x}_${y}`;
   if (world[key] !== undefined) return world[key];
@@ -100,126 +167,192 @@ function generateBlock(x, y) {
   let type = 0;
   const ground = 60;
 
-  if (y === ground) {
-    type = 2; // Трава
-  } else if (y === ground + 1) {
-    type = 3; // Грязь
-  } else if (y > ground + 1) {
-    type = 1; // Камень (основа)
-    
-    // ГЕНЕРАЦИЯ РУД (Исправлено)
+  if (y === ground) type = 2;
+  else if (y === ground + 1) type = 3;
+  else if (y > ground + 1) {
     let r = Math.random();
-    
-    // Алмазы - очень глубоко и редкие
-    if (y > 90 && r < 0.02) {
-      type = 8; 
-    } 
-    // Рубин и Изумруд - глубоко
-    else if (y > 80 && r < 0.03) {
-      type = (Math.random() > 0.5) ? 9 : 10;
-    }
-    // Золото и Серебро
-    else if (y > 70 && r < 0.04) {
-      type = (Math.random() > 0.5) ? 6 : 12;
-    }
-    // Железо, Уголь, Медь - везде в камне
-    else if (r < 0.05) {
-      type = 5; // Железо
-    } else if (r < 0.08) {
-      type = 4; // Уголь
-    } else if (r < 0.10) {
-      type = 7; // Медь
-    } else if (r < 0.12) {
-      type = 18; // Лава (карманы в камне)
-    }
+    if (y > 120 && r < 0.012) type = 8; // Алмазы
+    else if (y > 100 && r < 0.002) type = 15; // Обсидиан
+    else if (r < 0.001) type = 18; // Лава
+    else if (r < 0.003) type = 10; // Изумруд
+    else if (r < 0.035) type = 5; // Железо
+    else if (r < 0.05) type = 7; // Медь
+    else if (r < 0.004) type = 9; // Рубин
+    else if (r < 0.06) type = 6; // Золото
+    else if (r < 0.07) type = 12; // Серебро
+    else if (r < 0.09) type = 4; // Уголь
+    else if (r < 0.10) type = 14; // Глина
+    else type = 1;
   }
-  
-  // Редкие озера воды на поверхности
-  if (y === ground && Math.sin(x * 0.2) > 0.9) type = 17;
 
-  // Здания (оставляем как было)
-  if (y === ground - 1 && x % 150 === 0) type = 11;
+  // Песок у воды
+  if (y === ground && getNoise(x) > 0.85) type = 13;
+  if (y === ground && getNoise(x * 1.2) > 0.92) type = 17;
+
+  // Здания реже
+  if (y === ground - 1 && x % 200 === 0) type = 11;
+
+  // Деревья
+  if (y < ground && y > ground - 5 && x % 70 === 0) {
+    type = y > ground - 4 ? 20 : 21;
+  }
 
   world[key] = type;
   return type;
 }
 
-/* ================= ENTITIES ================= */
-const player = { x: 50, y: 450, vx: 0, vy: 0, w: 5, h: 5, grounded: false };
-const npcs = Array.from({length: 8}, () => ({
-  x: (Math.random() - 0.5) * 1000, // Случайная позиция по горизонтали
-  y: 470, 
-  targetX: (Math.random() - 0.5) * 1000, 
-  speed: 0.2 + Math.random() * 0.3, 
-  color: `hsl(${Math.random() * 360}, 70%, 60%)`, // Разные цвета для всех
-  w: 4, h: 4 
+const player = { x: 100, y: 400, vx: 0, vy: 0, w: 5, h: 5, grounded: false, speedBoost: 1, jumpBoost: 1 };
+
+// Оптимизация: меньше NPC и птиц
+const npcs = Array.from({length: 3}, () => ({ 
+  x: Math.random()*400, y: 476, targetX: Math.random()*400, speed: 0.25, 
+  color: `hsl(${Math.random()*360}, 65%, 55%)` 
 }));
-const birds = Array.from({length: 18}, () => ({ x: Math.random()*500, y: 470, vx: 0, vy: 0 }));
+const birds = Array.from({length: 10}, () => ({ 
+  x: Math.random()*600, y: 250, vx: (Math.random()-0.5)*0.4, vy: 0 
+}));
 
-/* ================= LOGIC =======ubigl.club========== */
+function createParticles(x, y, color) {
+  // Меньше частиц
+  for (let i = 0; i < 4; i++) {
+    particles.push({
+      x, y,
+      vx: (Math.random() - 0.5) * 1.5,
+      vy: (Math.random() - 0.5) * 1.5 - 0.8,
+      life: 15,
+      color
+    });
+  }
+}
+
+function updateParticles() {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy += 0.08;
+    p.life--;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+// Оптимизация: обновляем жидкости реже
 function updateLiquids() {
-    const keys = Object.keys(world);
-    for (let key of keys) {
-        if (world[key] === 17 || world[key] === 18) {
-            let [x, y] = key.split('_').map(Number);
-            if (Math.random() > 0.1) continue;
-            if (generateBlock(x, y + 1) === 0) {
-                world[`${x}_${y+1}`] = world[key];
-            } else if (generateBlock(x + 1, y) === 0) {
-                world[`${x+1}_${y}`] = world[key];
-            } else if (generateBlock(x - 1, y) === 0) {
-                world[`${x-1}_${y}`] = world[key];
-            }
-        }
-    }
-}
-
-function updateEntities() {
-    // NPC movement
-    npcs.forEach(n => {
-        if (n.x < n.targetX) n.x += n.speed; else n.x -= n.speed;
-        if (Math.abs(n.x - n.targetX) < 2) n.targetX = (Math.random() - 0.5) * 400;
-    });
-    // Birds
-    birds.forEach(b => {
-        if (Math.random() < 0.02) b.vx = (Math.random() - 0.5) * 2;
-        if (Math.random() < 0.01 && b.y > 470) b.vy = -2;
-        b.vy += 0.1; b.x += b.vx; b.y += b.vy;
-        if (b.y > 475) { b.y = 475; b.vy = 0; }
-    });
-}
-
-function checkCol(nx, ny) {
-  for (let ix = Math.floor(nx/TILE); ix <= Math.floor((nx+player.w)/TILE); ix++) {
-    for (let iy = Math.floor(ny/TILE); iy <= Math.floor((ny+player.h)/TILE); iy++) {
-      let t = generateBlock(ix, iy);
-      if (t > 0 && !TYPES[t].liquid && t !== 11) return true;
+  if (frameCount % 5 !== 0) return;
+  const keys = Object.keys(world);
+  const maxUpdates = 15; // Лимит обновлений за кадр
+  let updates = 0;
+  
+  for (let key of keys) {
+    if (updates >= maxUpdates) break;
+    if (world[key] === 17 || world[key] === 18) {
+      if (Math.random() > 0.25) continue;
+      let [x, y] = key.split('_').map(Number);
+      if (generateBlock(x, y + 1) === 0) {
+        world[`${x}_${y+1}`] = world[key];
+        updates++;
+      } else if (generateBlock(x + 1, y) === 0 && Math.random() > 0.5) {
+        world[`${x+1}_${y}`] = world[key];
+        updates++;
+      } else if (generateBlock(x - 1, y) === 0 && Math.random() > 0.5) {
+        world[`${x-1}_${y}`] = world[key];
+        updates++;
+      }
     }
   }
-  return false;
 }
 
-/* ================= CORE LOOP =========seo====u=b=i=gl= */
-let camX = 0, camY = 0;
 window.keys = {};
 window.onkeydown = (e) => {
-    window.keys[e.key.toLowerCase()] = true;
-    if (e.key === 'e') toggleInv();
-    const nums = ["Stone", "Dirt", "Grass", "Water", "Lava", "Coal", "Iron"];
-    if (e.key >= 1 && e.key <= 7) { selectedBlock = nums[e.key-1]; updateUI(); }
+  window.keys[e.key.toLowerCase()] = true;
+  if (e.key === 'e') toggleInv();
+  if (e.key === 't') tryTrade();
+  if (e.key === 'f') placeTorch();
+  const nums = ["Stone", "Dirt", "Grass", "Wood", "Diamond", "Gold", "Iron", "Coin", "Torch"];
+  if (e.key >= '1' && e.key <= '9') { 
+    selectedBlock = nums[e.key-1]; 
+    updateUI(); 
+  }
 };
 window.onkeyup = (e) => window.keys[e.key.toLowerCase()] = false;
+
+function placeTorch() {
+  if ((inventory["Torch"] || 0) > 0) {
+    const tx = Math.floor(player.x / TILE);
+    const ty = Math.floor(player.y / TILE);
+    if (generateBlock(tx, ty - 1) === 0) {
+      world[`${tx}_${ty-1}`] = 16;
+      inventory["Torch"]--;
+      updateUI();
+    }
+  }
+}
+
+function tryTrade() {
+  const npc = npcs.find(n => Math.hypot(n.x - player.x, n.y - player.y) < 25);
+  if (npc && (inventory["Iron Bar"] || 0) >= 10) {
+    inventory["Iron Bar"] -= 10;
+    inventory["Coin"] = (inventory["Coin"] || 0) + 1;
+    addAchievement("💰 Первая сделка!");
+    updateUI();
+  }
+}
+
+function updateUI() {
+  document.getElementById("status").innerText = `🔨 Рука: ${selectedBlock} (${inventory[selectedBlock]||0})`;
+  const inv = document.getElementById("full-inv");
+  inv.innerHTML = Object.entries(inventory)
+    .filter(i => i[1] > 0)
+    .map(i => `<div style="background:#222; padding:5px; border-radius:3px; border:1px solid #444;">${i[0]}: <b>${i[1]}</b></div>`)
+    .join("");
+  
+  document.getElementById("hp-bar").style.width = (playerStats.hp / playerStats.maxHp * 100) + "%";
+  document.getElementById("hunger-bar").style.width = (playerStats.hunger / playerStats.maxHunger * 100) + "%";
+}
+
+function craft(item, req) {
+  for (let r in req) if ((inventory[r]||0) < req[r]) return;
+  for (let r in req) inventory[r] -= req[r];
+  inventory[item] = (inventory[item]||0) + 1;
+  if (item.includes("Pickaxe")) { tools.pickaxe = true; addAchievement("⛏️ Первая кирка!"); }
+  if (item.includes("Shovel")) { tools.shovel = true; addAchievement("🔨 Настоящий шахтёр!"); }
+  updateUI();
+}
+
+function buy(item, cost) {
+  if ((inventory["Coin"] || 0) < cost) return;
+  inventory["Coin"] -= cost;
+  
+  if (item === "Super Jump") { player.jumpBoost = 1.5; addAchievement("🦘 Прыгун!"); }
+  else if (item === "Speed Boots") { player.speedBoost = 1.5; addAchievement("👢 Быстрые ноги!"); }
+  else if (item === "Bread") { 
+    playerStats.hunger = Math.min(playerStats.maxHunger, playerStats.hunger + 20);
+    addAchievement("🍞 Вкусно!");
+  }
+  updateUI();
+}
+
+function toggleInv() {
+  isInvOpen = !isInvOpen;
+  document.getElementById("inv-win").style.display = isInvOpen ? "block" : "none";
+  updateUI();
+}
 
 canvas.onmousedown = (e) => {
   if (isInvOpen) return;
   const wx = Math.floor((e.clientX + camX) / TILE);
   const wy = Math.floor((e.clientY + camY) / TILE);
-  const block = generateBlock(wx, wy);
-
-  if (block > 0 && block !== 11) {
-    inventory[TYPES[block].name] = (inventory[TYPES[block].name] || 0) + 1;
+  const b = generateBlock(wx, wy);
+  
+  if (b > 0) {
+    const blockName = TYPES[b].name;
+    inventory[blockName] = (inventory[blockName] || 0) + 1;
+    createParticles(wx * TILE, wy * TILE, TYPES[b].color);
     world[`${wx}_${wy}`] = 0;
-  } else if (block === 0 && inventory[selectedBlock] > 0) {
+    
+    if (blockName === "Diamond" && (inventory["Diamond"] || 0) === 1) addAchievement("💎 Первый алмаз!");
+    if (blockName === "Gold" && (inventory["Gold"] || 0) === 1) addAchievement("🟡 Золотая лихорадка!");
+  } else if (inventory[selectedBlock] > 0) {
     const id = Object.keys(TYPES).find(k => TYPES[k].name === selectedBlock);
     world[`${wx}_${wy}`] = parseInt(id);
     inventory[selectedBlock]--;
@@ -227,91 +360,201 @@ canvas.onmousedown = (e) => {
   updateUI();
 };
 
-function toggleInv() {
-    isInvOpen = !isInvOpen;
-    document.getElementById("inv-win").style.display = isInvOpen ? "block" : "none";
-    updateUI();
-}
+let camX = 0, camY = 0;
 
-function updateUI() {
-    document.getElementById("status").innerText = `Рука: ${selectedBlock} (${inventory[selectedBlock]||0})`;
-    document.getElementById("full-inv").innerHTML = Object.entries(inventory).filter(i => i[1]>0).map(i => `<div>${i[0]}: ${i[1]}</div>`).join("");
-}
-
-function craft(item, req) {
-    for (let r in req) if ((inventory[r]||0) < req[r]) return;
-    for (let r in req) inventory[r] -= req[r];
-    inventory[item] = (inventory[item]||0) + 1;
-    if (item.includes("Pickaxe")) tools.pickaxe = true;
-    updateUI();
-}
+// Кеш для расчета освещения факелов
+let torchCache = new Map();
 
 function loop() {
+  frameCount++;
+  
+  // День/ночь
+  gameTime += 0.0008;
+  const dayProgress = (Math.sin(gameTime) + 1) / 2;
+  const isDay = dayProgress > 0.3;
+  
+  // Небо
+  const r = Math.floor(135*dayProgress);
+  const g = Math.floor(206*dayProgress);
+  const b = Math.floor(235*dayProgress);
+  ctx.fillStyle = isDay ? `rgb(${r},${g},${b})` : `rgb(10,10,${Math.floor(26+20*dayProgress)})`;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Облака (только в день и реже)
+  if (isDay && frameCount % 2 === 0) {
+    ctx.fillStyle = `rgba(255,255,255,${0.25*dayProgress})`;
+    clouds.forEach(c => {
+      c.x += c.speed;
+      if (c.x > 1200) c.x = -c.w;
+      ctx.fillRect(c.x - camX * 0.5, c.y - camY * 0.3, c.w, 12);
+    });
+  }
+
   if (!isInvOpen) {
-    let speed = 0.4 + (tools.pickaxe ? 0.3 : 0);
+    const speed = 0.4 * player.speedBoost;
     if (window.keys["a"]) player.vx -= speed;
     if (window.keys["d"]) player.vx += speed;
-    if ((window.keys["w"] || window.keys[" "]) && player.grounded) { player.vy = -3.5; player.grounded = false; }
-
-    player.vy += 0.2; player.vx *= 0.8;
-    if (!checkCol(player.x + player.vx, player.y)) player.x += player.vx; else player.vx = 0;
+    if ((window.keys["w"] || window.keys[" "]) && player.grounded) { 
+      player.vy = -3.8 * player.jumpBoost; 
+      player.grounded = false; 
+    }
+    player.vy += 0.22; 
+    player.vx *= 0.85;
+    
+    if (!checkCol(player.x + player.vx, player.y)) player.x += player.vx; 
+    else player.vx = 0;
+    
     player.grounded = false;
     if (!checkCol(player.x, player.y + player.vy)) player.y += player.vy; 
-    else { if (player.vy > 0) player.grounded = true; player.vy = 0; }
+    else { 
+      if (player.vy > 0) player.grounded = true; 
+      player.vy = 0; 
+    }
 
     camX += (player.x - camX - canvas.width / 2) * 0.1;
     camY += (player.y - camY - canvas.height / 2) * 0.1;
   }
 
-  updateEntities();
-  if (Math.random() < 0.1) updateLiquids();
+  // Статы (реже)
+  if (frameCount % 60 === 0) {
+    if (Math.random() < 0.3) playerStats.hunger = Math.max(0, playerStats.hunger - 1);
+    if (playerStats.hunger === 0 && Math.random() < 0.5) playerStats.hp = Math.max(0, playerStats.hp - 1);
+  }
 
-  // Rendering
-  ctx.fillStyle = "#0a0a1a";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  updateLiquids();
+  updateParticles();
 
-  const sx = Math.floor(camX / TILE) - 5;
-  const ex = sx + Math.ceil(canvas.width / TILE) + 10;
-  const sy = Math.floor(camY / TILE) - 5;
-  const ey = sy + Math.ceil(canvas.height / TILE) + 10;
+  // NPC (обновляем реже)
+  let nearNPC = false;
+  if (frameCount % 2 === 0) {
+    npcs.forEach(n => {
+      n.x += (n.x < n.targetX ? 0.25 : -0.25);
+      if (Math.abs(n.x - n.targetX) < 5) n.targetX = player.x + (Math.random()-0.5)*300;
+      if (Math.hypot(n.x - player.x, n.y - player.y) < 25) nearNPC = true;
+    });
+  }
+  // Рисуем NPC
+  npcs.forEach(n => {
+    ctx.fillStyle = n.color; 
+    ctx.fillRect(n.x - camX, n.y - camY, 5, 6);
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(n.x - camX + 1, n.y - camY + 1, 1, 1);
+  });
+  document.getElementById("trade-msg").style.display = nearNPC ? "block" : "none";
 
+  // Птицы (обновляем реже)
+  if (frameCount % 3 === 0) {
+    birds.forEach(b => {
+      b.x += b.vx;
+      b.y += (Math.random()-0.5)*0.5;
+      if (b.x < 0 || b.x > 1000) b.vx *= -1;
+    });
+  }
+  // Рисуем птиц
+  birds.forEach(b => {
+    ctx.fillStyle = "#fff"; 
+    ctx.fillRect(b.x - camX, b.y - camY, 2, 2);
+    ctx.fillRect(b.x - camX - 2, b.y - camY, 1, 1);
+    ctx.fillRect(b.x - camX + 2, b.y - camY, 1, 1);
+  });
+
+  // Оптимизация: строгие границы рендера
+  const sx = Math.floor(camX / TILE) - 1;
+  const ex = sx + Math.ceil(canvas.width / TILE) + 2;
+  const sy = Math.floor(camY / TILE) - 1;
+  const ey = sy + Math.ceil(canvas.height / TILE) + 2;
+
+  // Обновляем кеш факелов только раз в 10 кадров
+  if (frameCount % 10 === 0) {
+    torchCache.clear();
+    for (let x = sx - 4; x < ex + 4; x++) {
+      for (let y = sy - 4; y < ey + 4; y++) {
+        if (generateBlock(x, y) === 16) {
+          torchCache.set(`${x}_${y}`, { x, y });
+        }
+      }
+    }
+  }
+
+  // Рендер мира
   for (let x = sx; x < ex; x++) {
     for (let y = sy; y < ey; y++) {
       const type = generateBlock(x, y);
       if (type === 0) continue;
+
+      let depthShade = Math.max(0, 1 - (y - 60) / 80);
+      let torchLight = 0;
       
-      let dist = Math.hypot(x - Math.floor(player.x/TILE), y - Math.floor(player.y/TILE));
-      let light = Math.max(0, 1 - dist / 10) + 0.2; // Чуть светлее база (+0.2)
-      if (TYPES[type].light > 0) light += 0.6;
+      // Быстрая проверка света от факелов
+      torchCache.forEach(torch => {
+        let td = Math.hypot(x - torch.x, y - torch.y);
+        if (td < 4) torchLight = Math.max(torchLight, 1 - td / 4);
+      });
+      
+      let baseLight = isDay ? depthShade * 0.7 : depthShade * 0.2;
+      let light = Math.max(0.05, baseLight + torchLight);
+      
+      if (TYPES[type].light > 0) light = 1;
 
       ctx.globalAlpha = Math.min(1, light);
       ctx.fillStyle = TYPES[type].color;
       ctx.fillRect(x * TILE - camX, y * TILE - camY, TILE, TILE);
+      
       if (TYPES[type].label) {
-          ctx.fillStyle = "#fff"; ctx.font = "5px Arial";
-          ctx.fillText(TYPES[type].label, x * TILE - camX, y * TILE - camY - 2);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = "#fff";
+        ctx.font = "9px monospace";
+        ctx.fillText(TYPES[type].label, x * TILE - camX + 1, y * TILE - camY + 6);
       }
     }
   }
+  
+  ctx.globalAlpha = 1;
+  
+  // Частицы
+  particles.forEach(p => {
+    ctx.fillStyle = p.color;
+    ctx.globalAlpha = p.life / 15;
+    ctx.fillRect(p.x - camX, p.y - camY, 2, 2);
+  });
   ctx.globalAlpha = 1;
 
-  // Draw Entities
-  npcs.forEach(n => { ctx.fillStyle = n.color; ctx.fillRect(n.x - camX, n.y - camY, n.w, n.h); });
-  birds.forEach(b => { ctx.fillStyle = "#fff"; ctx.fillRect(b.x - camX, b.y - camY, 2, 2); });
-  ctx.fillStyle = "#0ff"; ctx.fillRect(player.x - camX, player.y - camY, player.w, player.h);
+  // Игрок
+  ctx.fillStyle = "#0ff"; 
+  ctx.fillRect(player.x - camX, player.y - camY, 5, 5);
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(player.x - camX + 1, player.y - camY + 1, 1, 1);
+
+  // UI (обновляем реже)
+  if (frameCount % 10 === 0) {
+    const depth = Math.max(0, Math.floor((player.y / TILE) - 60));
+    document.getElementById("depth").textContent = depth;
+    document.getElementById("time-icon").textContent = isDay ? "☀️" : "🌙";
+    document.getElementById("time-text").textContent = isDay ? "День" : "Ночь";
+  }
 
   requestAnimationFrame(loop);
 }
 
-/* ================= START ================= */
-canvas.width = window.innerWidth;
+function checkCol(nx, ny) {
+  for (let ix = Math.floor(nx/TILE); ix <= Math.floor((nx+5)/TILE); ix++) {
+    for (let iy = Math.floor(ny/TILE); iy <= Math.floor((ny+5)/TILE); iy++) {
+      let t = generateBlock(ix, iy);
+      if (t > 0 && t !== 17 && t !== 18 && t !== 16) return true;
+    }
+  }
+  return false;
+}
+
+canvas.width = window.innerWidth; 
 canvas.height = window.innerHeight;
-loadGame();
-setInterval(saveGame, 5000); // Автосохранение каждые 5 сек ubigl
+window.addEventListener('resize', () => {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+});
+
 updateUI();
 loop();
 </script>
 </body>
-
 </html>
-
